@@ -11,6 +11,8 @@ import (
 func main() {
 	cfg := config.MustLoad()
 
+	log.Printf("Starting %s server", cfg.Env)
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
