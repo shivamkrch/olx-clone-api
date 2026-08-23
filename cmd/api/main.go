@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/shivamkrch/olx-clone-api/internal/config"
+	"github.com/shivamkrch/olx-clone-api/internal/handlers"
 )
 
 func main() {
@@ -15,11 +16,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
-	})
+	mux.HandleFunc("GET /health", handlers.Health)
 
 	srv := http.Server{
 		Addr:         ":" + cfg.Port,
