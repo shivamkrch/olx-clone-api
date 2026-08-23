@@ -6,11 +6,19 @@ import (
 	"time"
 
 	"github.com/shivamkrch/olx-clone-api/internal/config"
+	"github.com/shivamkrch/olx-clone-api/internal/db"
 	"github.com/shivamkrch/olx-clone-api/internal/handlers"
 )
 
 func main() {
 	cfg := config.MustLoad()
+
+	_, err := db.Connect(cfg.DatabaseUrl)
+	if err != nil {
+		log.Fatalf("main.db.connect: %v", err)
+	}
+
+	log.Println("Database connected")
 
 	log.Printf("Starting %s server", cfg.Env)
 
