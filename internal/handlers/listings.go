@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/shivamkrch/olx-clone-api/internal/httpx"
+	"github.com/shivamkrch/olx-clone-api/internal/middlewares"
 )
 
 type listing struct {
@@ -37,7 +41,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 				LIMIT 100`)
 	if err != nil {
 		lh.logger.Error("Error querying listings table", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 		return
 	}
 
@@ -49,7 +53,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 
 		if err := rows.Scan(&l.Id, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt); err != nil {
 			lh.logger.Error("Error scanning listing", "err", err)
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 			return
 		}
 
@@ -58,7 +62,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	if err = rows.Err(); err != nil {
 		lh.logger.Error("Row iteration error", "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 		return
 	}
 
@@ -70,15 +74,53 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(listings)
 }
 
-func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+func (lh *ListingHandler) Get(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	// requestId := middlewares.GetRequestIdFromContext(ctx)
 
-	_, err := lh.db.ExecContext(r.Context(), `DELETE FROM listings WHERE id = $1`, id)
+	id := r.PathValue("id")
+	listing := lh.getListing(ctx, id)
+	if listing == nil {
+		httpx.Error(w, http.StatusNotFound, "Requested listing is not available.", httpx.CodeListingNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	_ = json.NewEncoder(w).Encode(listing)
+}
+
+func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	requestId := middlewares.GetRequestIdFromContext(ctx)
+
+	id := r.PathValue("id")
+	if lh.getListing(ctx, id) == nil {
+		httpx.Error(w, http.StatusNotFound, "Requested listing is not available.", httpx.CodeListingNotFound)
+		return
+	}
+
+	_, err := lh.db.ExecContext(ctx, `DELETE FROM listings WHERE id = $1`, id)
 	if err != nil {
-		lh.logger.Error("delete failed", "listing_id", id, "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		lh.logger.Error("delete failed", "listing_id", id, "requestId", requestId, "err", err)
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (lh *ListingHandler) getListing(ctx context.Context, id string) *listing {
+	requestId := middlewares.GetRequestIdFromContext(ctx)
+
+	row := lh.db.QueryRowContext(ctx, "SELECT id, title, description, price, city, created_at FROM listings WHERE id = $1", id)
+	var l listing
+	err := row.Scan(&l.Id, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt)
+	if err != nil {
+		lh.logger.Error("Error scanning listing", "listing_id", id, "requestId", requestId, "err", err)
+		return nil
+	}
+
+	return &l
 }

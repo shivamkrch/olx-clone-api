@@ -10,16 +10,17 @@ import (
 	"github.com/shivamkrch/olx-clone-api/internal/config"
 	"github.com/shivamkrch/olx-clone-api/internal/db"
 	"github.com/shivamkrch/olx-clone-api/internal/handlers"
+	"github.com/shivamkrch/olx-clone-api/internal/middlewares"
 )
 
 func main() {
 	cfg := config.MustLoad()
 
-	json_handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	jsonLogHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.LevelInfo,
 	})
-	logger := slog.New(json_handler)
+	logger := slog.New(jsonLogHandler)
 	slog.SetDefault(logger)
 
 	db, err := db.Connect(cfg.DatabaseUrl)
@@ -37,11 +38,13 @@ func main() {
 
 	lh := handlers.NewListingHandler(db, logger)
 	mux.HandleFunc("GET /listings", lh.List)
+	mux.HandleFunc("GET /listings/{id}", lh.Get)
 	mux.HandleFunc("DELETE /listings/{id}", lh.Delete)
 
+	handler := middlewares.RequestId(mux)
 	srv := http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      mux,
+		Handler:      handler,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 30,
 		IdleTimeout:  time.Second * 60,
