@@ -3,7 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -18,12 +18,14 @@ type listing struct {
 }
 
 type ListingHandler struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewListingHandler(db *sql.DB) *ListingHandler {
+func NewListingHandler(db *sql.DB, logger *slog.Logger) *ListingHandler {
 	return &ListingHandler{
-		db: db,
+		db:     db,
+		logger: logger,
 	}
 }
 
@@ -34,7 +36,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 				ORDER BY created_at DESC
 				LIMIT 100`)
 	if err != nil {
-		log.Printf("Error querying listings table: %v", err)
+		lh.logger.Error("Error querying listings table", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -46,7 +48,7 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 		var l listing
 
 		if err := rows.Scan(&l.Id, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt); err != nil {
-			log.Printf("Error scanning listing: %v", err)
+			lh.logger.Error("Error scanning listing", "err", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
@@ -55,10 +57,12 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = rows.Err(); err != nil {
-		log.Printf("Row iteration error: %v", err)
+		lh.logger.Error("Row iteration error", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+
+	lh.logger.Info("listings fetched", "total", len(listings))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -71,7 +75,7 @@ func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	_, err := lh.db.ExecContext(r.Context(), `DELETE FROM listings WHERE id = $1`, id)
 	if err != nil {
-		log.Printf("Error deleting listing, %v", err)
+		lh.logger.Error("delete failed", "listing_id", id, "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

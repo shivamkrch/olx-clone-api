@@ -2,7 +2,9 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/shivamkrch/olx-clone-api/internal/config"
@@ -12,6 +14,13 @@ import (
 
 func main() {
 	cfg := config.MustLoad()
+
+	json_handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.LevelInfo,
+	})
+	logger := slog.New(json_handler)
+	slog.SetDefault(logger)
 
 	db, err := db.Connect(cfg.DatabaseUrl)
 	if err != nil {
@@ -26,7 +35,7 @@ func main() {
 
 	mux.HandleFunc("GET /health", handlers.Health)
 
-	lh := handlers.NewListingHandler(db)
+	lh := handlers.NewListingHandler(db, logger)
 	mux.HandleFunc("GET /listings", lh.List)
 	mux.HandleFunc("DELETE /listings/{id}", lh.Delete)
 
