@@ -12,11 +12,19 @@ import (
 	"github.com/shivamkrch/olx-clone-api/internal/middlewares"
 )
 
+// type listingCreate struct {
+// 	Title       string    `json:"title"`
+// 	Description string    `json:"description"`
+// 	Price       int64     `json:"price"`
+// 	City        string    `json:"city"`
+// 	CreatedAt   time.Time `json:"createdAt"`
+// }
+
 type listing struct {
 	Id          string    `json:"id"`
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
-	Price       int       `json:"price"`
+	Price       int64     `json:"price"`
 	City        string    `json:"city"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
@@ -74,6 +82,44 @@ func (lh *ListingHandler) List(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(listings)
 }
 
+func (lh *ListingHandler) Create(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	requestId := middlewares.GetRequestIdFromContext(ctx)
+
+	var lc listing
+	if err := json.NewDecoder(r.Body).Decode(&lc); err != nil {
+		lh.logger.Error("failed to decode request body", "request_id", requestId, "err", err)
+		httpx.Error(w, http.StatusBadRequest, "Invalid request body.", httpx.CodeMalformedJson)
+		return
+	}
+
+	query := `INSERT INTO listings (title, description, price, city) VALUES ($1, $2, $3, $4) RETURNING id, created_at`
+	row := lh.db.QueryRowContext(ctx, query, lc.Title, lc.Description, lc.Price, lc.City)
+	var id string
+	var createdAt time.Time
+	if err := row.Scan(&id, &createdAt); err != nil {
+		lh.logger.Error("Failed to insert", "request_id", requestId, "err", err)
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
+		return
+	}
+
+	newListing := listing{
+		Id:          id,
+		Title:       lc.Title,
+		Description: lc.Description,
+		Price:       lc.Price,
+		City:        lc.City,
+		CreatedAt:   createdAt,
+	}
+
+	lh.logger.Info("listing created", "request_id", requestId, "listing_id", id)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
+	_ = json.NewEncoder(w).Encode(newListing)
+}
+
 func (lh *ListingHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	// requestId := middlewares.GetRequestIdFromContext(ctx)
@@ -103,7 +149,7 @@ func (lh *ListingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	_, err := lh.db.ExecContext(ctx, `DELETE FROM listings WHERE id = $1`, id)
 	if err != nil {
-		lh.logger.Error("delete failed", "listing_id", id, "requestId", requestId, "err", err)
+		lh.logger.Error("delete failed", "listing_id", id, "request_id", requestId, "err", err)
 		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 		return
 	}
@@ -118,7 +164,7 @@ func (lh *ListingHandler) getListing(ctx context.Context, id string) *listing {
 	var l listing
 	err := row.Scan(&l.Id, &l.Title, &l.Description, &l.Price, &l.City, &l.CreatedAt)
 	if err != nil {
-		lh.logger.Error("Error scanning listing", "listing_id", id, "requestId", requestId, "err", err)
+		lh.logger.Error("Error scanning listing", "listing_id", id, "request_id", requestId, "err", err)
 		return nil
 	}
 

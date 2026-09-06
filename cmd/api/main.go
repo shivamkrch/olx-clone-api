@@ -38,6 +38,7 @@ func main() {
 
 	lh := handlers.NewListingHandler(db, logger)
 	mux.HandleFunc("GET /listings", lh.List)
+	mux.HandleFunc("POST /listings", lh.Create)
 	mux.HandleFunc("GET /listings/{id}", lh.Get)
 	mux.HandleFunc("DELETE /listings/{id}", lh.Delete)
 
