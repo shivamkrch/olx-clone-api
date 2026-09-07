@@ -12,14 +12,6 @@ import (
 	"github.com/shivamkrch/olx-clone-api/internal/middlewares"
 )
 
-// type listingCreate struct {
-// 	Title       string    `json:"title"`
-// 	Description string    `json:"description"`
-// 	Price       int64     `json:"price"`
-// 	City        string    `json:"city"`
-// 	CreatedAt   time.Time `json:"createdAt"`
-// }
-
 type listing struct {
 	Id          string    `json:"id"`
 	Title       string    `json:"title"`
@@ -86,33 +78,23 @@ func (lh *ListingHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	requestId := middlewares.GetRequestIdFromContext(ctx)
 
-	var lc listing
+	var lc CreateListingRequest
 	if err := json.NewDecoder(r.Body).Decode(&lc); err != nil {
 		lh.logger.Error("failed to decode request body", "request_id", requestId, "err", err)
 		httpx.Error(w, http.StatusBadRequest, "Invalid request body.", httpx.CodeMalformedJson)
 		return
 	}
 
-	query := `INSERT INTO listings (title, description, price, city) VALUES ($1, $2, $3, $4) RETURNING id, created_at`
+	query := `INSERT INTO listings (title, description, price, city) VALUES ($1, $2, $3, $4) RETURNING id, title, created_at`
 	row := lh.db.QueryRowContext(ctx, query, lc.Title, lc.Description, lc.Price, lc.City)
-	var id string
-	var createdAt time.Time
-	if err := row.Scan(&id, &createdAt); err != nil {
+	var newListing CreateListingResponse
+	if err := row.Scan(&newListing.Id, &newListing.Title, &newListing.CreatedAt); err != nil {
 		lh.logger.Error("Failed to insert", "request_id", requestId, "err", err)
 		httpx.Error(w, http.StatusInternalServerError, "Something went wrong", httpx.CodeInternalError)
 		return
 	}
 
-	newListing := listing{
-		Id:          id,
-		Title:       lc.Title,
-		Description: lc.Description,
-		Price:       lc.Price,
-		City:        lc.City,
-		CreatedAt:   createdAt,
-	}
-
-	lh.logger.Info("listing created", "request_id", requestId, "listing_id", id)
+	lh.logger.Info("listing created", "request_id", requestId, "listing_id", newListing.Id)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -122,7 +104,6 @@ func (lh *ListingHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (lh *ListingHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	// requestId := middlewares.GetRequestIdFromContext(ctx)
 
 	id := r.PathValue("id")
 	listing := lh.getListing(ctx, id)
